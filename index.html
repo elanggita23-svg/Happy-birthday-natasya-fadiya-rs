@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASCII Lily Bouquet v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{--cream:#f6f0c8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:#000;overflow:hidden}
+body{display:flex;flex-direction:column;align-items:center;color:var(--cream);font-family:"Instrument Serif",Georgia,"Times New Roman",serif}
+#stars{position:fixed;inset:0;width:100%;height:100%}
+h1{position:relative;z-index:1;font-weight:400;font-size:clamp(24px,6vw,46px);line-height:1.05;text-align:center;padding:4vh 5vw 0;animation:in 1.6s ease both}
+@keyframes in{from{opacity:0}to{opacity:1}}
+.stage{position:relative;z-index:1;flex:1;min-height:0;width:100%;display:grid;place-items:center;padding:1vh 0 2vh}
+#art{height:100%;max-width:100%;aspect-ratio:550/750;cursor:pointer;outline-offset:6px}
+#art:focus-visible{outline:1px dashed rgba(246,240,200,.6)}
+@media (prefers-reduced-motion:reduce){h1{animation:none}}
+</style>
+</head>
+<body>
+<canvas id="stars" aria-hidden="true"></canvas>
+<h1><i>Happy Birthday </i> Natasya Fadiya Rahma Sawali<br> have <i>a onderful </i> Dayyyyy!!</h1>
+<div class="stage">
+  <canvas id="art" tabindex="0" role="img" aria-label="Buket bunga lily yang tumbuh dari karakter ASCII. Klik untuk memutar ulang."></canvas>
+</div>
+<script>
+"use strict";
+const W=550,H=750,COLS=150,ROWS=136,CW=W/COLS,CH=H/ROWS,S=2,T_END=6.6;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const art=document.getElementById('art'),actx=art.getContext('2d');
+art.width=W*S;art.height=H*S;
+const big=document.createElement('canvas');big.width=COLS*3;big.height=ROWS*3;
+const bctx=big.getContext('2d');
+const sm=document.createElement('canvas');sm.width=COLS;sm.height=ROWS;
+const sctx=sm.getContext('2d',{willReadFrequently:true});
+
+const rng=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const R=rng(11);
+const clamp=(v,a=0,b=1)=>Math.min(b,Math.max(a,v));
+const ease=t=>1-Math.pow(1-clamp(t),3);
+const seg=(t,a,b)=>clamp((t-a)/(b-a));
+const qb=(p0,p1,p2,t)=>[(1-t)*(1-t)*p0[0]+2*(1-t)*t*p1[0]+t*t*p2[0],(1-t)*(1-t)*p0[1]+2*(1-t)*t*p1[1]+t*t*p2[1]];
+const qt=(p0,p1,p2,t)=>Math.atan2(2*(1-t)*(p1[1]-p0[1])+2*t*(p2[1]-p1[1]),2*(1-t)*(p1[0]-p0[0])+2*t*(p2[0]-p1[0]));
+
+/* warna: [ujung, tengah, pangkal, bintik] */
+const PAL={
+  red:['#ff6a5c','#d9141f','#6e0610','#2a0003'],
+  pink:['#ffb3e3','#e44aac','#8f0f62','#4a0030'],
+  cream:['#fffdf4','#efe4cf','#bda680','#8a5a30'],
+  peach:['#fbe8d2','#e4b48d','#ab6431','#6b3414'],
+  yellow:['#fff7a8','#f2d12a','#a87c00','#5a3c00'],
+  maroon:['#d9424e','#8c1020','#46040f','#1c0005'],
+  rose:['#ea6ba3','#a82c62','#561030','#2a0518'],
+  tan:['#f0dcc4','#cca682','#8f6a45','#5a3a1c']
+};
+/* [x, y, panjang kelopak, rotasi, kemiringan, warna, jeda mekar] - urut belakang ke depan */
+const F=[
+  [272,92,64,-10,.8,'tan',.30],[181,164,74,15,.8,'cream',.20],[376,150,78,-25,.75,'yellow',.25],
+  [408,270,78,30,.8,'rose',.12],[136,284,78,-20,.75,'yellow',.05],[266,200,100,-12,.85,'red',0],
+  [400,512,72,25,.8,'maroon',.35],[136,470,68,-30,.8,'yellow',.40],[198,356,104,200,.8,'pink',.10],
+  [320,392,108,20,.75,'cream',.15],[266,484,90,5,.8,'peach',.22],[330,250,62,40,.7,'pink',.28]
+];
+const stems=F.map((f,i)=>{
+  const b=[275+(R()-.5)*30,690+(R()-.5)*8];
+  const c=[(b[0]+f[0])/2+(f[0]-275)*.12+(R()-.5)*40,(b[1]+f[1])/2];
+  const leaves=[0,1,2].map(j=>({t:.25+R()*.45,side:(i+j)%2?1:-1,off:.5+R()*.4,l:55+R()*50,w:7+R()*6,b:(R()-.5)*16}));
+  return{f,b,c,e:[f[0],f[1]],d:i*.07,leaves};
+});
+const blade=(n,l0,l1,w0,w1,spread,d0,dr)=>Array.from({length:n},()=>({x:275+(R()-.5)*64,y:692,a:-Math.PI/2+(R()-.5)*spread,l:l0+R()*(l1-l0),w:w0+R()*(w1-w0),b:(R()-.5)*60,d:d0+R()*dr}));
+const back=blade(24,140,310,3,6,1.5,0,.8), front=blade(10,70,160,6,9,2.6,1.5,1);
+
+function leaf(c,x,y,a,len,w,bend,g,dark){
+  if(g<=0)return;const L=len*ease(g);
+  c.save();c.translate(x,y);c.rotate(a);
+  const gr=c.createLinearGradient(0,0,L,0);
+  gr.addColorStop(0,dark?'#145a1c':'#1d7a26');gr.addColorStop(1,dark?'#4ea03c':'#9be070');
+  c.fillStyle=gr;c.beginPath();c.moveTo(0,0);
+  c.bezierCurveTo(L*.25,-w,L*.7,-w*.8+bend,L,bend);
+  c.bezierCurveTo(L*.7,w*.8+bend,L*.25,w,0,0);c.fill();
+  c.strokeStyle='rgba(210,255,180,.6)';c.lineWidth=1.2;c.beginPath();c.moveTo(0,0);
+  c.quadraticCurveTo(L*.5,bend*.3,L,bend);c.stroke();c.restore();
+}
+function stem(c,s,t){
+  const g=ease(seg(t,s.d,s.d+1.9));if(g<=0)return;
+  c.strokeStyle='#40a038';c.lineWidth=2.8;c.lineCap='round';c.beginPath();
+  const n=Math.ceil(30*g)+1;
+  for(let i=0;i<=n;i++){const p=qb(s.b,s.c,s.e,g*i/n);i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]);}
+  c.stroke();
+}
+function bud(c,f,pt,ang,g,fade){
+  const P=PAL[f[5]],len=f[2]*.55*ease(g)*fade;if(len<1)return;
+  c.save();c.translate(pt[0],pt[1]);c.rotate(ang);
+  const gr=c.createLinearGradient(0,0,len,0);
+  gr.addColorStop(0,'#3a8a2a');gr.addColorStop(.3,P[2]);gr.addColorStop(.7,P[1]);gr.addColorStop(1,P[0]);
+  c.fillStyle=gr;c.beginPath();c.moveTo(0,0);
+  c.bezierCurveTo(len*.2,-len*.22,len*.7,-len*.17,len,0);
+  c.bezierCurveTo(len*.7,len*.17,len*.2,len*.22,0,0);c.fill();c.restore();
+}
+function lily(c,f,q){
+  const [x,y,L,rot,tilt,pk]=f,P=PAL[pk],e=ease(q),len=L*e,wid=L*.21*(.3+.7*e);
+  c.save();c.translate(x,y);c.rotate(rot*Math.PI/180);c.scale(1,tilt);
+  for(let w=0;w<2;w++)for(let k=0;k<3;k++){
+    c.save();c.rotate((k*120+(w?0:60))*Math.PI/180);
+    const l=len*(w?1:.92),curl=l*.07*(k%2?1:-1),gr=c.createLinearGradient(0,0,l,0);
+    gr.addColorStop(0,'#c9d95e');gr.addColorStop(.1,P[2]);gr.addColorStop(.4,P[1]);gr.addColorStop(1,P[0]);
+    c.fillStyle=gr;c.beginPath();c.moveTo(0,0);
+    c.bezierCurveTo(l*.3,-wid*1.2,l*.78,-wid*.95,l,curl);
+    c.bezierCurveTo(l*.72,wid*.95,l*.3,wid*1.2,0,0);c.fill();
+    if(!w){c.fillStyle='rgba(0,0,0,.3)';c.fill();}
+    c.strokeStyle='rgba(0,0,0,.28)';c.lineWidth=1.4;c.beginPath();c.moveTo(l*.06,0);c.quadraticCurveTo(l*.5,curl*.3,l*.88,curl*.8);c.stroke();
+    c.strokeStyle='rgba(255,255,255,.14)';c.lineWidth=1;
+    for(const m of[-.45,.45]){c.beginPath();c.moveTo(l*.1,0);c.quadraticCurveTo(l*.5,wid*m,l*.82,curl*.8+wid*m*.25);c.stroke();}
+    if(e>.5){c.fillStyle=P[3];for(let s=0;s<10;s++){const v=((s*37+k*5)%13-6)*wid*.07;c.beginPath();c.arc(l*(.12+s*.05),v,1.2+L*.011,0,7);c.fill();}}
+    c.restore();
+  }
+  if(e>.4){
+    c.strokeStyle='#d2e083';c.lineWidth=1.5;c.fillStyle='#8f3a10';
+    for(let k=0;k<6;k++){
+      const a=k*Math.PI/3+.3,sl=len*.58,ex=Math.cos(a)*sl,ey=Math.sin(a)*sl;
+      c.beginPath();c.moveTo(0,0);c.quadraticCurveTo(ex*.5,ey*.5-4,ex,ey);c.stroke();
+      c.save();c.translate(ex,ey);c.rotate(a);c.beginPath();c.ellipse(0,0,L*.065,L*.03,0,0,7);c.fill();c.restore();
+    }
+  }
+  c.restore();
+}
+function draw(t,now){
+  const c=bctx;c.setTransform(big.width/W,0,0,big.height/H,0,0);c.clearRect(0,0,W,H);
+  if(t>T_END-1.2&&!reduce){c.translate(275,690);c.rotate(Math.sin(now/1300)*.012);c.translate(-275,-690);}
+  back.forEach(b=>leaf(c,b.x,b.y,b.a,b.l,b.w,b.b,seg(t,b.d,b.d+2.2),1));
+  stems.forEach(s=>stem(c,s,t));
+  stems.forEach(s=>s.leaves.forEach(l=>{
+    const p=qb(s.b,s.c,s.e,l.t),a=qt(s.b,s.c,s.e,l.t)+l.side*l.off,st=s.d+1.9*l.t;
+    leaf(c,p[0],p[1],a,l.l,l.w,l.b,seg(t,st,st+1.5),0);
+  }));
+  stems.forEach(s=>{
+    const f=s.f,q=seg(t,2.8+f[6]*3,4.6+f[6]*3),bg=seg(t,s.d+1.7,s.d+2.7);
+    if(q<.9)bud(c,f,s.e,qt(s.b,s.c,s.e,1),bg,1-seg(q,0,.45));
+    if(q>0)lily(c,f,q);
+  });
+  front.forEach(b=>leaf(c,b.x,b.y,b.a,b.l,b.w,b.b,seg(t,b.d,b.d+2),1));
+}
+
+/* gambar -> karakter ASCII berwarna */
+const RAMP=' .,:;-=+*ox%#@';
+const hash=(x,y,z)=>{let h=Math.imul(x*374761393+y*668265263+z*2147483647,1274126177);h^=h>>>13;h=Math.imul(h,1103515245);return((h^h>>>16)>>>0)/4294967296};
+function ascii(tick){
+  sctx.clearRect(0,0,COLS,ROWS);sctx.drawImage(big,0,0,COLS,ROWS);
+  const d=sctx.getImageData(0,0,COLS,ROWS).data;
+  actx.setTransform(S,0,0,S,0,0);actx.clearRect(0,0,W,H);
+  actx.font='6px ui-monospace,Menlo,Consolas,monospace';actx.textBaseline='middle';
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    const i=(y*COLS+x)*4,a=d[i+3];if(a<40)continue;
+    const r=d[i],g=d[i+1],b=d[i+2],m=Math.max(r,g,b),lum=(.3*r+.59*g+.11*b)/255*(a/255);
+    if(lum<.07||m<1)continue;
+    const n=hash(x,y,0),fl=hash(x,y,7)<.06?hash(x,y,tick):n;
+    const idx=clamp(Math.floor((lum*.9+(fl-.5)*.35)*RAMP.length),1,RAMP.length-1);
+    const s=(150+m*.4)/m;
+    actx.fillStyle=`rgb(${r*s|0},${g*s|0},${b*s|0})`;
+    actx.fillText(RAMP[idx],x*CW,y*CH+CH/2);
+  }
+}
+
+/* langit berbintang */
+const sc=document.getElementById('stars'),sx=sc.getContext('2d');let stars=[];
+function resize(){
+  const d=devicePixelRatio||1;sc.width=innerWidth*d;sc.height=innerHeight*d;
+  stars=Array.from({length:Math.round(innerWidth*innerHeight/5500)},()=>({x:Math.random(),y:Math.random(),r:Math.random()*1.1+.3,p:Math.random()*6.28,s:Math.random()*1.5+.4,k:Math.random()<.06}));
+}
+addEventListener('resize',resize);resize();
+
+let t0=performance.now()-(reduce?T_END*1000:0),last=0;
+function loop(now){
+  const t=(now-t0)/1000,growing=t<T_END;
+  if(growing||(!reduce&&now-last>70)||!last){last=now;draw(Math.min(t,T_END),now);ascii(reduce?0:Math.floor(now/250));}
+  sx.setTransform(1,0,0,1,0,0);sx.clearRect(0,0,sc.width,sc.height);sx.fillStyle=sx.strokeStyle='#fff';
+  const d=devicePixelRatio||1,fade=reduce?1:clamp(t/3.5);
+  for(const s of stars){
+    const X=s.x*sc.width,Y=s.y*sc.height;
+    sx.globalAlpha=fade*(reduce?.6:.35+.55*Math.abs(Math.sin(now/1000*s.s+s.p)));
+    if(s.k){const z=(3+s.r*3)*d;sx.lineWidth=d*.8;sx.beginPath();sx.moveTo(X-z,Y);sx.lineTo(X+z,Y);sx.moveTo(X,Y-z);sx.lineTo(X,Y+z);sx.stroke();}
+    else{sx.beginPath();sx.arc(X,Y,s.r*d,0,7);sx.fill();}
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* klik / Enter / Spasi untuk memutar ulang */
+const replay=()=>{t0=performance.now();};
+art.addEventListener('click',replay);
+art.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();replay();}});
+</script>
+</body>
+</html>
